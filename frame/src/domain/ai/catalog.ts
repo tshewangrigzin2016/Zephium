@@ -55,13 +55,7 @@ export function keyState(models: WorkModelsV1 | null, provider: WorkModelProvide
 /** A provider can run calls now: its key is set and not refused. */
 export function usable(models: WorkModelsV1 | null, provider: WorkModelProvider): boolean {
   if (!models) return false;
-  if (provider === "cloud")
-    return (
-      models.cloud.signed_in &&
-      models.entries.some(
-        (entry) => entry.model.provider === "cloud" && !models.cloud.locked.includes(entry.id),
-      )
-    );
+  if (provider === "cloud") return false;
   if (provider === "compatible")
     return (
       !!models.providers.find((row) => row.provider === "compatible")?.base &&
@@ -78,8 +72,8 @@ const suggested: readonly WorkModelProvider[] = ["anthropic", "open_ai", "google
 
 /**
  * The picker's list for a role: every curated model of usable providers,
- * recommended first, grouped by provider, the signed-in account's hosted
- * models first. The person's own server adds the models it serves.
+ * recommended first, grouped by provider. The person's own server adds the
+ * models it serves.
  * The best-known providers without a key are listed apart, as needing one.
  */
 export function pickerGroups(
@@ -88,7 +82,7 @@ export function pickerGroups(
   endpoint: readonly WorkModelEntry[] = [],
 ) {
   const entries = [...(models?.entries ?? []), ...endpoint];
-  const order: readonly WorkModelProvider[] = ["cloud", ...keyedProviders];
+  const order = keyedProviders;
   const ready: ModelGroup[] = [];
   const needsKey: WorkModelProvider[] = [];
   for (const provider of order) {
@@ -122,7 +116,9 @@ export function requiredPlan(models: WorkModelsV1 | null, id: string): string | 
 
 export function entryOf(models: WorkModelsV1 | null, id: string | null | undefined) {
   if (!models || !id) return null;
-  return models.entries.find((entry) => entry.id === id) ?? null;
+  return (
+    models.entries.find((entry) => entry.id === id && entry.model.provider !== "cloud") ?? null
+  );
 }
 
 /** The efforts `id` takes as the lead, weakest first; empty when it takes none. */

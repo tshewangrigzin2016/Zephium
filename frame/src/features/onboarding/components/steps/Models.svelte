@@ -5,7 +5,6 @@
   import * as m from "$shared/i18n/messages";
   import { commands, type WorkLocalServerV1 } from "$shared/ipc/bindings";
   import Icon from "$shared/ui/Icon";
-  import ZephiumTile from "$shared/ui/ZephiumTile";
   import type { Mind } from "../../lib/minds";
 
   let {
@@ -21,17 +20,8 @@
     onsubmit: () => void;
   } = $props();
 
-  // Offered only where hosted models exist; reading this contacts no server.
-  let hosted = $state(false);
-
   onMount(() => {
     let live = true;
-    void Promise.resolve()
-      .then(() => commands.accountGet())
-      .then(({ account }) => {
-        if (live) hosted = account.available && account.hosted_models !== false;
-      })
-      .catch(() => {});
     if (!discovering) discovering = true;
     // Asks only this computer's own ports.
     void Promise.resolve()
@@ -50,8 +40,7 @@
 
   type Option = {
     id: Mind;
-    /** Zephium shows its own app icon instead. */
-    icon?: IconSvgElement;
+    icon: IconSvgElement;
     title: string;
     body: string;
     found: string | null;
@@ -59,13 +48,6 @@
 
   const options = $derived.by(() => {
     const list: Option[] = [];
-    if (hosted)
-      list.push({
-        id: "zephium",
-        title: m.onb_ai_zephium(),
-        body: m.onb_ai_zephium_body(),
-        found: null,
-      });
     list.push(
       { id: "key", icon: Key01Icon, title: m.onb_ai_key(), body: m.onb_ai_key_body(), found: null },
       {
@@ -97,8 +79,7 @@
         onkeydown={keydown}
       />
       <span class="top">
-        {#if option.icon}<span class="tile"><Icon icon={option.icon} size={18} /></span
-          >{:else}<ZephiumTile size={36} />{/if}
+        <span class="tile"><Icon icon={option.icon} size={18} /></span>
         {#if option.found}<span class="found">{option.found}</span>{/if}
       </span>
       <span class="title">{option.title}</span>

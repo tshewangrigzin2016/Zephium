@@ -17,14 +17,6 @@ const MAX_EMAIL_INPUT_BYTES: usize = 320;
 const MAX_SERVER_INPUT_BYTES: usize = 512;
 const MAX_NAME_INPUT_BYTES: usize = 512;
 const MAX_CURSOR_INPUT_BYTES: usize = 256;
-/// When to read an unconfirmed hosted call's receipt again: soon, then after
-/// the service's recovery has had time to settle or refund it.
-const RECEIPT_CHECKS: [std::time::Duration; 3] = [
-    std::time::Duration::from_secs(3),
-    std::time::Duration::from_secs(30),
-    std::time::Duration::from_secs(180),
-];
-
 static SERVICE: OnceLock<Arc<Service>> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, specta::Type, Eq, PartialEq)]
@@ -415,8 +407,6 @@ pub(crate) fn install(app: &tauri::AppHandle) {
             "zephium:account-changed",
             &AccountChanged { version: 1 },
         );
-        #[cfg(feature = "work-product")]
-        hosted::account_changed();
     }));
     if SERVICE.set(service.clone()).is_err() {
         return;
@@ -425,8 +415,6 @@ pub(crate) fn install(app: &tauri::AppHandle) {
     if AppSettings.get(SCOPED_KEY).is_none() && AppSettings.set(SCOPED_KEY.into(), "1".into()) {
         std::thread::spawn(|| SystemVault.drop_unscoped());
     }
-    #[cfg(feature = "work-product")]
-    hosted::install(service.clone());
     // Nobody who has not chosen an account, or another server, is ever
     // connected to one: the server is asked only once they have.
     if !contacted(&service) {
@@ -449,137 +437,6 @@ fn contacted(service: &Service) -> bool {
     service.signed_in() || service.view().custom_server
 }
 
-/// The signed-in account as Work's hosted model provider.
-#[cfg(feature = "work-product")]
-mod hosted {
-    use super::*;
-    use zephium_agentic::lead::{LeadCloudRecord, LeadCredential, LeadSecret, LeadSecretFuture};
-    use zephium_app::work_models::{self, WorkCallSource, WorkCloudSession};
-    use zephium_core::work::model::WorkModelError;
-
-    static SIGNED_IN: AtomicBool = AtomicBool::new(false);
-
-    struct Hosted(Arc<Service>);
-
-    impl WorkCloudSession for Hosted {
-        fn signed_in(&self) -> bool {
-            self.0.signed_in()
-        }
-        fn plan(&self) -> Option<String> {
-            self.0.plan()
-        }
-        fn base(&self) -> String {
-            self.0.origin()
-        }
-        fn credential(&self) -> Arc<dyn LeadCredential> {
-            Arc::new(Bearer(self.0.clone()))
-        }
-        fn sourced(&self, request_id: &str, source: &WorkCallSource) {
-            self.0.record_call_source(
-                request_id,
-                match source {
-                    WorkCallSource::Task { profile, work } => CallSource::Task {
-                        profile: profile.clone(),
-                        work: work.clone(),
-                    },
-                    WorkCallSource::Voice => CallSource::Voice,
-                    WorkCallSource::Page {
-                        conversation,
-                        reply,
-                    } => {
-                        super::super::page_assist::hosted_sourced(request_id, conversation, *reply);
-                        CallSource::Page
-                    }
-                },
-            );
-        }
-        fn recorded(&self, record: LeadCloudRecord) {
-            self.0.usage_changed();
-            let per_credit =
-                |service: &Service| service.view().usage.and_then(|usage| usage.credit_units());
-            let unsettled = record.unsettled();
-            if let (Some(id), zephium_agentic::lead::LeadCloudAccounting::Settled { charged }) =
-                (&record.request_id, &record.accounting)
-            {
-                super::super::page_assist::hosted_charged(
-                    id,
-                    charged.as_deref().and_then(|units| units.parse().ok()),
-                    per_credit(&self.0),
-                );
-            }
-            let Some(id) = record.request_id.filter(|_| unsettled) else {
-                return;
-            };
-            let service = self.0.clone();
-            // Read the receipt; a hosted call is never sent again on its own.
-            tauri::async_runtime::spawn(async move {
-                for wait in RECEIPT_CHECKS {
-                    tokio::time::sleep(wait).await;
-                    match service.confirm_request(&id).await {
-                        Ok(receipt) if receipt.settled() => {
-                            super::super::page_assist::hosted_charged(
-                                &id,
-                                receipt
-                                    .charged
-                                    .as_deref()
-                                    .and_then(|units| units.parse().ok()),
-                                per_credit(&service),
-                            );
-                            return;
-                        }
-                        Err(AccountError::SignedOut | AccountError::NotFound) => return,
-                        _ => {}
-                    }
-                }
-            });
-        }
-    }
-
-    struct Bearer(Arc<Service>);
-
-    impl LeadCredential for Bearer {
-        fn secret(&self) -> LeadSecretFuture<'_> {
-            let service = self.0.clone();
-            Box::pin(async move {
-                // The first read after launch may touch the vault.
-                let token = tokio::task::spawn_blocking(move || service.bearer())
-                    .await
-                    .map_err(|_| WorkModelError::MissingKey)?
-                    .map_err(|_| WorkModelError::MissingKey)?;
-                LeadSecret::new(token.expose().to_owned())
-                    .map(Arc::new)
-                    .map_err(|_| WorkModelError::MissingKey)
-            })
-        }
-
-        fn rejected(&self) {
-            self.0.bearer_refused();
-        }
-    }
-
-    pub(super) fn install(service: Arc<Service>) {
-        SIGNED_IN.store(service.signed_in(), Ordering::Release);
-        work_models::install_cloud_session(Arc::new(Hosted(service)));
-        refresh_catalog();
-    }
-
-    /// Only a sign-in or sign-out changes what the picker offers.
-    pub(super) fn account_changed() {
-        let Some(service) = super::service() else {
-            return;
-        };
-        let now = service.signed_in();
-        if SIGNED_IN.swap(now, Ordering::AcqRel) != now {
-            work_models::cloud_session_changed();
-            refresh_catalog();
-        }
-    }
-
-    fn refresh_catalog() {
-        tauri::async_runtime::spawn(work_models::refresh_cloud_catalog());
-    }
-}
-
 pub(crate) fn service() -> Option<Arc<Service>> {
     SERVICE.get().cloned()
 }
@@ -593,16 +450,6 @@ fn project(view: View) -> AccountV1 {
     let billing = view.billing.as_ref();
     // Until Zephium's own server has been asked, what it offers is known.
     let ours = (!view.custom_server).then_some(true);
-    // The signed-in account's own answers outrank the public hints.
-    let hosted_models = view
-        .usage
-        .as_ref()
-        .map(|usage| usage.cloud_enabled)
-        .or(billing
-            .map(|billing| billing.capabilities.hosted_ai)
-            .filter(|on| *on))
-        .or(config.map(|c| c.cloud_enabled))
-        .or(ours);
     let sells = config
         .map(|c| c.billing_enabled)
         .or(ours)
@@ -612,7 +459,7 @@ fn project(view: View) -> AccountV1 {
         available: available(),
         server: view.server,
         custom_server: view.custom_server,
-        hosted_models,
+        hosted_models: Some(false),
         billing: sells,
         signup_open: config.map(|c| c.signup_open).or(ours),
         update_required: view.update_required,
@@ -1410,7 +1257,7 @@ mod tests {
     }
 
     #[test]
-    fn a_server_that_sells_nothing_offers_no_purchase_but_may_host_models() {
+    fn hosted_models_stay_unavailable_even_when_the_account_server_offers_them() {
         let billing: Billing = serde_json::from_value(serde_json::json!({
             "subscription": {"status": "not_applicable", "paidUntil": null, "cancelAtPeriodEnd": false},
             "paid": false,
@@ -1441,7 +1288,7 @@ mod tests {
         let account = project(view);
         assert_eq!(account.billing, Some(false));
         assert!(account.offers.is_empty());
-        assert_eq!(account.hosted_models, Some(true));
+        assert_eq!(account.hosted_models, Some(false));
         let usage = account.usage.unwrap();
         assert_eq!(usage.held.as_deref(), Some("120000"));
         assert_eq!(usage.remaining.as_deref(), Some("2500000"));

@@ -19,7 +19,7 @@
   const NONE = "none";
   const status = $derived(settings.status);
   const locale = () => document.documentElement.lang || "en";
-  const engines = $derived(status?.engines ?? []);
+  const engines = $derived(status?.engines.filter((engine) => engine !== "zephium") ?? []);
   const engineLabel = (engine: VoiceEngineV1) =>
     engine === "open_ai" || engine === "groq"
       ? m.voice_engine_key({ provider: engineName(engine) })
@@ -31,16 +31,18 @@
   );
   /** With nothing chosen, the first engine (this device's, where it has one) is the default. */
   const engineValue = $derived(
-    status?.chosen && engines.includes(status.chosen) ? status.chosen : (engines[0] ?? NONE),
+    status?.chosen && status.chosen !== "zephium" && engines.includes(status.chosen)
+      ? status.chosen
+      : (engines[0] ?? NONE),
   );
   const spoken = $derived(status?.language ?? status?.languages[0] ?? null);
   const spokenName = $derived(spoken ? languageName(spoken, locale()) : "");
   const engineNote = $derived.by(() => {
-    if (!status || !engines.length) return m.voice_engine_setup();
-    const effective = status.effective;
+    if (!status || !engines.length) return m.voice_engine_setup_keys();
+    const effective = status.effective === "zephium" ? null : status.effective;
     if (effective === "on_device") return m.voice_engine_private();
     const wantsDevice = engineValue === "on_device";
-    if (wantsDevice && !effective) return m.voice_engine_unsupported({ language: spokenName });
+    if (wantsDevice && !effective) return m.voice_engine_unsupported_keys({ language: spokenName });
     if (wantsDevice && effective)
       return m.voice_engine_fallback({ language: spokenName, engine: engineName(effective) });
     return effective ? m.voice_engine_cloud({ engine: engineName(effective) }) : "";

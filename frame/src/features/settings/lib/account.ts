@@ -3,7 +3,6 @@ import * as m from "$shared/i18n/messages";
 
 export const TERMS_URL = "https://zephium.app/terms";
 export const PRIVACY_URL = "https://zephium.app/privacy";
-export const SUPPORT_MAIL = "mailto:support@zephium.app";
 
 /** What a fault means to the person, in one sentence. */
 export function explainAccountFault(
@@ -70,18 +69,6 @@ export function explainAccountFault(
       return m.account_fault_avatar_busy({ seconds: Math.max(1, retryAfter ?? 30) });
     case "avatar_cancelled":
       return m.account_fault_avatar_cancelled();
-  }
-}
-
-/** Why a plan change ended as `failed`, from its stable code. */
-export function explainChangeError(code: string | null): string {
-  switch (code) {
-    case "payment_failed":
-      return m.account_change_failed_payment();
-    case "billing_review_required":
-      return m.account_fault_billing_review();
-    default:
-      return m.account_change_failed_other();
   }
 }
 

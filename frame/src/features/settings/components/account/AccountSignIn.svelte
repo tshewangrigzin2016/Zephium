@@ -106,7 +106,7 @@
   <div class="panes">
     <div class="pane" role="group" aria-labelledby={`${uid}-email`} inert={step !== "email"}>
       <h2 id={`${uid}-email`}>{m.account_welcome_title()}</h2>
-      <p class="body">{m.account_welcome_body()}</p>
+      <p class="body">{m.account_welcome_body_plain()}</p>
       <form
         class="entry"
         data-invalid={step === "email" && faulty && fault?.action === "send"}

@@ -4,6 +4,7 @@ import {
   contextSize,
   dollars,
   effortLevels,
+  entryOf,
   locked,
   pickerGroups,
   priceTier,
@@ -25,19 +26,19 @@ describe("the picker's list", () => {
     expect(pickerGroups(view, "page", listed).ready[0]!.entries).toEqual([known]);
     expect(pickerGroups(view, "light", listed).ready[0]!.entries).toEqual([known]);
   });
-  test("groups the curated models of usable providers, recommended first, hosted first", () => {
+  test("offers keyed providers and excludes hosted models even for a signed-in account", () => {
     const view = models({
       keys: { anthropic: "valid", open_ai: "set", google: "invalid" },
       cloud: true,
     });
     const { ready, needsKey } = pickerGroups(view, "lead");
-    expect(ready.map((group) => group.provider)).toEqual(["cloud", "anthropic", "open_ai"]);
-    expect(ready[1]!.entries.map((item) => item.id)).toEqual([
+    expect(ready.map((group) => group.provider)).toEqual(["anthropic", "open_ai"]);
+    expect(ready[0]!.entries.map((item) => item.id)).toEqual([
       "anthropic/claude-opus-5-5",
       "anthropic/claude-sonnet-5-5",
       "anthropic/claude-fable-5-1",
     ]);
-    expect(ready[2]!.entries.map((item) => item.id)).toEqual([
+    expect(ready[1]!.entries.map((item) => item.id)).toEqual([
       "openai/gpt-6-luna",
       "openai/gpt-6-sol",
       "openai/gpt-6-astra",
@@ -52,13 +53,13 @@ describe("the picker's list", () => {
     );
     expect(signedOut.ready.map((group) => group.provider)).toEqual(["anthropic", "open_ai"]);
     expect(signedOut.needsKey).not.toContain("cloud");
-    // A plan-locked hosted model stays listed to explain the plan, but a
-    // catalog of only locked models cannot run anything.
+    // Old hosted choices and server offers cannot reintroduce the service.
     const id = view.entries.find((item) => item.model.provider === "cloud")!.id;
     const lockedView = { ...view, cloud: { ...view.cloud, locked: [id] } };
     expect(locked(lockedView, id)).toBe(true);
     expect(usable(lockedView, "cloud")).toBe(false);
-    expect(usable(view, "cloud")).toBe(true);
+    expect(usable(view, "cloud")).toBe(false);
+    expect(entryOf(view, id)).toBeNull();
   });
 
   test("a custom server adds the models it serves", () => {

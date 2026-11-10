@@ -3,36 +3,6 @@ import type { AccountOfferV1, AccountPriceV1 } from "$shared/ipc/bindings";
 import * as m from "$shared/i18n/messages";
 
 export type PlanOffer = Extract<AccountOfferV1, { kind: "plan" }>;
-export type TopUpOffer = Extract<AccountOfferV1, { kind: "top_up" }>;
-
-export const planOffers = (offers: readonly AccountOfferV1[]) =>
-  offers.filter((offer): offer is PlanOffer => offer.kind === "plan");
-export const topUpOffers = (offers: readonly AccountOfferV1[]) =>
-  offers.filter((offer): offer is TopUpOffer => offer.kind === "top_up");
-
-const UNITS = /^\d{1,30}$/u;
-
-/** Packs smallest first, by the credit they add; any the server does not size go last. */
-export function packsInOrder(packs: readonly TopUpOffer[]): TopUpOffer[] {
-  const size = (pack: TopUpOffer) =>
-    pack.units && UNITS.test(pack.units) ? BigInt(pack.units) : null;
-  return packs
-    .map((pack, index) => ({ pack, index, units: size(pack) }))
-    .sort((a, b) => {
-      if (a.units === null || b.units === null)
-        return a.units === b.units ? a.index - b.index : a.units === null ? 1 : -1;
-      return a.units === b.units ? a.index - b.index : a.units < b.units ? -1 : 1;
-    })
-    .map(({ pack }) => pack);
-}
-
-/** How long every pack lasts, when they all last the same; then it is said once. */
-export function sharedLifetime(packs: readonly TopUpOffer[]): number | null {
-  const days = new Set(packs.map((pack) => pack.expires_days));
-  const [only] = days;
-  return days.size === 1 && only ? only : null;
-}
-
 /** What each plan includes when the server sends no list of its own; it mirrors the pricing page. */
 function plainFeatures(plan: string): string[] {
   switch (plan) {
@@ -62,12 +32,6 @@ function plainFeatures(plan: string): string[] {
 
 /** Each plan once, in the server's order. */
 const planIds = (plans: readonly PlanOffer[]) => [...new Set(plans.map((p) => p.plan))];
-
-/** The intervals on sale, monthly first. */
-export const intervalsOf = (plans: readonly PlanOffer[]) =>
-  [...new Set(plans.map((plan) => plan.interval))].sort(
-    (a, b) => Number(b === "monthly") - Number(a === "monthly"),
-  );
 
 /**
  * Yearly is called "2 months free" only where the numbers say so: every plan

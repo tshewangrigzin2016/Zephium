@@ -56,7 +56,7 @@ export function groupCalls(requests: readonly AccountRequestV1[]): CallGroup[] {
 }
 
 /** A time as milliseconds, or null when it is missing or unreadable. */
-export function moment(iso: string | null | undefined): number | null {
+function moment(iso: string | null | undefined): number | null {
   const at = iso ? Date.parse(iso) : Number.NaN;
   return Number.isNaN(at) ? null : at;
 }

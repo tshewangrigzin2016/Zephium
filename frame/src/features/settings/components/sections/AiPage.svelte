@@ -17,7 +17,6 @@
   import SettingsRow from "$shared/ui/SettingsRow";
   import AiProviderRow from "../AiProviderRow.svelte";
   import AiVoiceRow from "../AiVoiceRow.svelte";
-  import AiZephiumRow from "../AiZephiumRow.svelte";
   import WorkDecisions from "../WorkDecisions.svelte";
 
   let profile = $derived(tabs.profile());
@@ -51,8 +50,7 @@
     { role: "light", title: m.ai_role_light, description: m.ai_role_light_desc },
   ];
   const anyUsable = $derived(
-    !!models &&
-      (usable(models, "cloud") || keyedProviders.some((provider) => usable(models, provider))),
+    !!models && keyedProviders.some((provider) => usable(models, provider)),
   );
 
   function label(entry: WorkModelEntry) {
@@ -95,9 +93,7 @@
 {#if !profile || profile.kind === "incognito"}<p class="ai-note">{m.work_regular_profile()}</p>
 {:else if session?.unavailable && !models}<p class="ai-note" role="alert">{m.ai_unavailable()}</p>
 {:else}
-  {#if !anyUsable}<p class="ai-note">{m.ai_byok_start()}</p>{/if}
-
-  <AiZephiumRow />
+  {#if !anyUsable}<p class="ai-note">{m.ai_byok_start_keys()}</p>{/if}
 
   <SettingsGroup title={m.ai_keys_group()} description={m.ai_keys_note()}>
     {#if session}{#each keyedProviders as provider (provider)}<AiProviderRow

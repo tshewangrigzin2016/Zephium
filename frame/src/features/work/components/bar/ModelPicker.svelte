@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Popover } from "bits-ui";
-  import { onDestroy, onMount, tick, untrack } from "svelte";
-  import { accountSession, planName } from "$domain/account";
+  import { onDestroy, tick, untrack } from "svelte";
+  import { planName } from "$domain/account";
   import type { WorkModelEntry, WorkModelProvider, WorkModelReasoning } from "$shared/ipc/bindings";
   import { commands } from "$shared/ipc/bindings";
   import {
@@ -63,16 +63,6 @@
     return () => owner.dispose();
   });
 
-  onMount(() => {
-    void accountSession.retain();
-    return () => accountSession.release();
-  });
-  const account = $derived(accountSession.account());
-  /** Hosted models this server offers to someone not yet signed in. */
-  const hostedOffer = $derived(
-    !!account?.available && !account.signed_in && account.hosted_models === true,
-  );
-
   let open = $state(false);
   let trigger = $state<HTMLElement | null>(null);
   let material = $state<"opaque" | undefined>();
@@ -96,18 +86,12 @@
         ? m.ai_custom_name()
         : providerName(provider);
 
-  /** Every provider Settings offers: Zephium's own first, then the ready ones, then each with the one step that readies it. */
+  /** Ready providers first, then each with the step that readies it. */
   const seats = $derived.by<Seat[]>(() => {
-    const own: Seat[] = [];
     const ready: Seat[] = [];
     const rest: Seat[] = [];
-    for (const provider of ["cloud", ...keyedProviders] as const) {
-      if (provider === "cloud") {
-        if (usable(models, provider) || account?.signed_in)
-          own.push({ provider, standing: "ready" });
-        else if (account?.available && account.hosted_models === true)
-          own.push({ provider, standing: "sign_in" });
-      } else if (usable(models, provider)) ready.push({ provider, standing: "ready" });
+    for (const provider of keyedProviders) {
+      if (usable(models, provider)) ready.push({ provider, standing: "ready" });
       else
         rest.push({
           provider,
@@ -120,7 +104,7 @@
                 : "key",
         });
     }
-    return [...own, ...ready, ...rest];
+    return [...ready, ...rest];
   });
 
   const starred = $derived(new Set(favourites()));
@@ -577,9 +561,7 @@
 {#if keyless}
   <button type="button" class="model-trigger add-key ui-shine ui-shine-press" onclick={settings}>
     <span class="trigger-mark" aria-hidden="true"><Icon icon={Key01Icon} size={14} /></span>
-    <span class="trigger-name"
-      >{hostedOffer ? m.work_model_start() : m.work_model_add_model_key()}</span
-    >
+    <span class="trigger-name">{m.work_model_add_model_key()}</span>
   </button>
 {:else}<Popover.Root {open} onOpenChange={(next) => void opened(next)}>
     <Popover.Trigger

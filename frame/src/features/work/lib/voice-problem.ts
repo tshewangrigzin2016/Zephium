@@ -35,7 +35,7 @@ export function voiceProblem(
       return { message: m.voice_problem_language(), remedy: "settings" };
     case "no_engine":
       return {
-        message: IS_MAC ? m.voice_problem_no_engine_mac() : m.voice_problem_no_engine(),
+        message: IS_MAC ? m.voice_problem_no_engine_mac_keys() : m.voice_problem_no_engine_keys(),
         remedy: "settings",
       };
     case "key_refused":

@@ -149,53 +149,18 @@ test("Settings AI exposes Jev setup beside the regular model controls with hones
   await expect.element(screen.getByRole("heading", { name: "Work", exact: true })).toBeVisible();
 });
 
-test("Zephium AI is offered where the server hosts models, and shows the account once signed in", async () => {
+test("hosted AI is absent while provider keys and local models remain available", async () => {
   await page.viewport(1100, 1200);
-  native.read.mockResolvedValue(models({}));
-  const account = {
-    version: 1,
-    available: true,
-    server: "https://api.zephium.app",
-    custom_server: false,
-    hosted_models: true,
-    billing: true,
-    signup_open: true,
-    signed_in: false,
-    pending_email: null,
-    resend_in: null,
-    email: null,
-    name: null,
-    plan: null,
-    usage: null,
-    subscription: null,
-    offers: [],
-    checkout_open: false,
-    notice: null,
-  };
-  native.account.mockResolvedValue({ account, fault: null, retry_after: null });
-  const screen = await render(AiPage);
-  await expect.element(screen.getByRole("button", { name: "Sign in…" })).toBeVisible();
-  await screen.unmount();
-
   native.read.mockResolvedValue(models({ cloud: true }));
-  native.account.mockResolvedValue({
-    account: {
-      ...account,
-      signed_in: true,
-      email: "ada@example.com",
-      plan: "free",
-      usage: { used_percent: 30, resets_at: null, extra: false },
-    },
-    fault: null,
-    retry_after: null,
-  });
-  const signed = await render(AiPage);
-  await expect.element(signed.getByText("Signed in · Free plan · 30% used")).toBeVisible();
+  const screen = await render(AiPage);
   await expect
-    .element(signed.getByText("Add a provider key or sign in", { exact: false }))
-    .not.toBeInTheDocument();
+    .element(screen.getByText("Add a provider key or connect a local model", { exact: false }))
+    .toBeVisible();
+  await expect.element(screen.getByRole("button", { name: "Add key" }).first()).toBeVisible();
+  expect(screen.getByText("Zephium AI", { exact: true }).elements()).toHaveLength(0);
+  expect(screen.getByRole("button", { name: "Sign in…" }).elements()).toHaveLength(0);
+  expect(native.account).not.toHaveBeenCalled();
 });
-
 test("a model server already running here is one click away", async () => {
   await page.viewport(1100, 1400);
   native.read.mockResolvedValue(models({}));
