@@ -259,3 +259,5 @@ jobs:
         shell: bash
         run: python scripts/ci/flaky-summary.py target/nextest/ci/junit.xml
       - run: cargo test --locked --manifest-path desktop/windows-log-tests/Cargo.toml
+      - name: MCP HTTP and stdio transport regressions
+        run: cargo test -p zephium-mcp --locked --features http,fixture

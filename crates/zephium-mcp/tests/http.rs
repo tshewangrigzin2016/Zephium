@@ -161,6 +161,78 @@ async fn an_http_server_answers_over_json() {
     assert_eq!(pong.text, "pong");
 }
 
+async fn rejects_oversized_response(chunked: bool) {
+    for (status, limit) in [
+        ("200 OK", 16 * 1024 * 1024),
+        ("500 Internal Server Error", 64 * 1024),
+    ] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/mcp", listener.local_addr().unwrap());
+        let worker = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                connections.spawn(async move {
+                    let mut request = [0u8; 4096];
+                    if socket.read(&mut request).await.unwrap_or(0) == 0 {
+                        return;
+                    }
+                    let framing = if chunked {
+                        "transfer-encoding: chunked\r\n".to_owned()
+                    } else {
+                        format!("content-length: {}\r\n", limit + 1)
+                    };
+                    let headers = format!(
+                        "HTTP/1.1 {status}\r\ncontent-type: application/json\r\n{framing}connection: close\r\n\r\n"
+                    );
+                    if socket.write_all(headers.as_bytes()).await.is_err() {
+                        return;
+                    }
+                    if chunked {
+                        let body = vec![b' '; 64 * 1024];
+                        let head = format!("{:x}\r\n", body.len());
+                        for _ in 0..=limit / body.len() {
+                            if socket.write_all(head.as_bytes()).await.is_err()
+                                || socket.write_all(&body).await.is_err()
+                                || socket.write_all(b"\r\n").await.is_err()
+                            {
+                                return;
+                            }
+                        }
+                    }
+                    // Keep the response unfinished so buffering cannot look like rejection.
+                    std::future::pending::<()>().await;
+                });
+            }
+        });
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            McpSession::connect(&Endpoint::Http(HttpServer {
+                url,
+                auth: HttpAuth::None,
+            })),
+        )
+        .await;
+        worker.abort();
+        let _ = worker.await;
+        assert_eq!(
+            result.map(|connection| connection.err()),
+            Ok(Some(McpError::Protocol)),
+            "{status}, chunked={chunked}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn oversized_content_length_is_refused_before_reading_the_body() {
+    rejects_oversized_response(false).await;
+}
+
+#[tokio::test]
+async fn oversized_chunked_body_is_refused_before_the_response_finishes() {
+    rejects_oversized_response(true).await;
+}
+
 #[tokio::test]
 async fn a_bearer_is_sent_and_a_refusal_asks_for_sign_in() {
     let url = server(Some("secret")).await;
