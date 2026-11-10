@@ -129,6 +129,7 @@ test("signed in, the initials open the account, and the panel keeps the keyboard
   await userEvent.keyboard("{Tab}");
   await expect.element(page.getByRole("menuitem", { name: "Manage account" })).toHaveFocus();
   await userEvent.keyboard("{Escape}");
+  await expect.element(avatar).toHaveAttribute("aria-expanded", "false");
   await expect.element(avatar).toHaveFocus();
   await avatar.click();
   await page.getByRole("menuitem", { name: "Manage account" }).click();
