@@ -56,7 +56,7 @@ test("Voice lists only usable engines and says where audio goes, in both themes"
   await shoot("on-device");
 
   native.language.mockResolvedValue(
-    status({ language: "pl-PL", on_device: null, effective: "zephium" }),
+    status({ language: "pl-PL", on_device: null, effective: "open_ai" }),
   );
   await page.getByRole("button", { name: "Language" }).click();
   await page.getByRole("option", { name: "Polish (Poland)" }).click();
@@ -64,7 +64,7 @@ test("Voice lists only usable engines and says where audio goes, in both themes"
   await expect
     .element(
       page.getByText(
-        "This device can’t recognize Polish (Poland), so dictation in it uses Zephium AI.",
+        "This device can’t recognize Polish (Poland), so dictation in it uses OpenAI.",
       ),
     )
     .toBeVisible();
@@ -75,6 +75,7 @@ test("Voice lists only usable engines and says where audio goes, in both themes"
   await expect
     .element(page.getByRole("option", { name: "Groq · your key" }))
     .not.toBeInTheDocument();
+  expect(page.getByRole("option", { name: "Zephium AI", exact: true }).query()).toBeNull();
   await page.getByRole("option", { name: "OpenAI · your key" }).click();
   expect(native.engine).toHaveBeenCalledWith("open_ai");
   await expect
@@ -89,9 +90,7 @@ test("with no engine on Windows the row says how to set one up", async () => {
     status({ engines: [], effective: null, on_device: null, languages: ["en-US"] }),
   );
   const screen = await render(VoiceRowStage);
-  await expect
-    .element(page.getByText("Sign in to Zephium AI or add an OpenAI or Groq key to dictate."))
-    .toBeVisible();
+  await expect.element(page.getByText("Add an OpenAI or Groq key to dictate.")).toBeVisible();
   await expect.element(page.getByRole("button", { name: "Dictation" })).toBeDisabled();
   await shoot("none");
   await screen.unmount();

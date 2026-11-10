@@ -2,7 +2,6 @@
   import { onMount } from "svelte";
   import { accountSession as session, avatarUrl, initials, planName } from "$domain/account";
   import * as m from "$shared/i18n/messages";
-  import { preferences } from "$domain/preferences";
   import { identityAvatar, profiles } from "$domain/profiles";
   import ProfileAvatar from "$shared/ui/ProfileAvatar";
   import * as settings from "../lib/settings-state.svelte";
@@ -23,10 +22,7 @@
     signedIn ? (account?.name ?? account?.email ?? "") : m.settings_identity_sign_in(),
   );
   let detail = $derived.by(() => {
-    if (!signedIn)
-      return preferences.aiEnabled()
-        ? m.settings_identity_sign_in_desc()
-        : m.settings_identity_sign_in_desc_plain();
+    if (!signedIn) return m.settings_identity_sign_in_desc_plain();
     const plan = planName(account?.plan);
     if (plan) return m.account_plan_line({ plan });
     return account?.name ? (account.email ?? "") : m.settings_identity_account();

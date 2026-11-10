@@ -68,7 +68,9 @@
       </p>{/if}
     <AccountIdentity />
     {#if account.vault_fault}<div class="fault" role="alert">
-        <p>{IS_WINDOWS ? m.account_vault_fault_windows() : m.account_vault_fault_mac()}</p>
+        <p>
+          {IS_WINDOWS ? m.account_vault_fault_windows_plain() : m.account_vault_fault_mac_plain()}
+        </p>
         <Button
           size="compact"
           variant="ghost"

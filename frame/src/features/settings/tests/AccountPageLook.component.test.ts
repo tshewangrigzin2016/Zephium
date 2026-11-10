@@ -1,5 +1,5 @@
 import "$styles/global.css";
-import { test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import type {
@@ -34,7 +34,7 @@ vi.mock("$shared/ipc/bindings", async () => {
     accountUsageHistory: async () => state.history ?? history,
     profilesGet: async () => ({ status: "ok" as const, data: null }),
     accountReceipt: async (id: string) => ({
-      request: [...history.requests, ...days.requests].find((row) => row.id === id) ?? null,
+      request: history.requests.find((row) => row.id === id) ?? null,
       fault: null,
     }),
     accountSessions: async () => ({ sessions: devices, fault: null }),
@@ -97,52 +97,6 @@ const titles: Record<string, string> = {
   w3: "Summarise the Q3 board deck",
   w4: "Reply to the landlord about the lease",
 };
-
-/** Calls spread over the last days, newest first, the way the service lists them. */
-const days: AccountHistoryV1 = (() => {
-  const now = Date.now();
-  const midnight = new Date(now).setHours(0, 0, 0, 0);
-  const at = (time: number) => new Date(time).toISOString();
-  const minutes = 60_000;
-  const hours = 60 * minutes;
-  const call = (
-    id: string,
-    start: number,
-    work: string | null,
-    charged: string,
-    model = "fast",
-    callState = "settled",
-  ): AccountRequestV1 => ({
-    id,
-    model_id: model,
-    state: callState,
-    charged,
-    reserved: "1200000",
-    started_at: at(start),
-    finished_at: callState === "running" ? null : at(start + 20_000),
-    error_class: null,
-    funding: callState === "settled" ? "allowance" : null,
-    source:
-      work === "voice" ? { kind: "voice" } : work ? { kind: "task", profile: "p1", work } : null,
-  });
-  return {
-    requests: [
-      call("d1", now - 4 * minutes, "w1", "0", "fast", "running"),
-      call("d2", now - 6 * minutes, "w1", "412000"),
-      call("d3", now - 9 * minutes, "w1", "1840000", "deep"),
-      call("d4", now - 12 * minutes, "voice", "30000"),
-      call("d5", midnight - 3 * hours, "w2", "960000"),
-      call("d6", midnight - 3 * hours - 4 * minutes, "w2", "2210000", "deep"),
-      call("d7", midnight - 9 * hours, "w4", "180000"),
-      call("d8", midnight - 2 * 24 * hours - 5 * hours, "w3", "3120000", "deep"),
-      call("d9", midnight - 2 * 24 * hours - 5 * hours - 2 * minutes, "w3", "450000"),
-      call("d10", midnight - 2 * 24 * hours - 6 * hours, null, "0", "fast", "released"),
-      call("d11", midnight - 11 * 24 * hours - 2 * hours, "w2", "780000"),
-    ],
-    next_cursor: "more",
-    fault: null,
-  };
-})();
 
 const devices: AccountSessionV1[] = [
   {
@@ -246,16 +200,6 @@ test("Settings → Account signed out, waiting for a code, and signed in", async
   await shoot("signed-out", base);
   await shoot("code", { ...base, pending_email: "ada@example.com", resend_in: 42 });
   await shoot("signed-in", signedIn);
-  await shoot("history", signedIn, async (screen) => {
-    await screen.getByRole("button", { name: "Usage history" }).click();
-    await settle();
-    await screen
-      .getByRole("button", { name: /\d calls?/u })
-      .first()
-      .click();
-    await settle();
-    await screen.getByRole("button", { name: "Details for this request" }).nth(1).click();
-  });
   const pro: AccountV1 = {
     ...signedIn,
     plan: "pro",
@@ -304,24 +248,6 @@ test("Settings → Account signed out, waiting for a code, and signed in", async
     }),
   });
   await shoot("paid", pro);
-  state.history = days;
-  const openHistory = (scroll: number) => async (screen: Awaited<ReturnType<typeof render>>) => {
-    await screen.getByRole("button", { name: "Usage history" }).click();
-    await settle();
-    await screen
-      .getByRole("button", { name: /Flights to Lisbon/u })
-      .first()
-      .click();
-    await settle();
-    await screen.getByRole("button", { name: "Details for this request" }).nth(1).click();
-    await settle();
-    document.querySelector(".settings-content")?.scrollTo({ top: scroll });
-    await screen.getByText("Your Zephium AI credits by task", { exact: false }).hover();
-  };
-  await shoot("pro-history", pro, openHistory(240));
-  // A day's heading holds at the top while its rows scroll under it.
-  await shoot("pro-history-scrolled", pro, openHistory(760), 900);
-  state.history = null;
   await shoot("devices", pro, async (screen) => {
     await screen.getByRole("button", { name: "Signed-in devices" }).click();
   });
@@ -355,45 +281,12 @@ test("Settings → Account signed out, waiting for a code, and signed in", async
   });
   await shoot("avatar-crop", signedIn, async (screen) => {
     await screen.getByRole("button", { name: "Add a photo" }).click();
-    await settle();
+    await expect.element(screen.getByRole("application")).toBeVisible();
     screen.getByRole("application").element().focus();
     const { userEvent } = await import("vitest/browser");
     await userEvent.keyboard("++++{Shift>}{ArrowLeft}{ArrowLeft}{ArrowLeft}{/Shift}");
     screen.getByRole("application").element().blur();
   });
-  const packs: AccountV1["offers"] = [
-    ["staging-topup", "1000000", 100],
-    ["credits-5", "5000000", 500],
-    ["credits-10", "10000000", 1000],
-    ["credits-25", "25000000", 2500],
-    ["credits-50", "50000000", 5000],
-  ].map(([id, units, cents]) => ({
-    kind: "top_up" as const,
-    id: id as string,
-    name: null,
-    units: units as string,
-    price: { amount_minor: cents as number, currency: "usd" },
-    expires_days: 365,
-  }));
-  await shoot(
-    "credits",
-    {
-      ...pictured,
-      offers: [...signedIn.offers.filter((offer) => offer.kind === "plan"), ...packs],
-    },
-    async (screen) => {
-      await screen.getByRole("button", { name: "Buy credits" }).click();
-      await settle();
-      await screen.getByText("$10", { exact: true }).click();
-    },
-  );
-  await shoot(
-    "plans",
-    { ...pro, plan: "free", subscription: signedIn.subscription },
-    async (screen) => {
-      await screen.getByRole("button", { name: "Upgrade", exact: true }).click();
-    },
-  );
   await shoot("billing-off", {
     ...signedIn,
     billing: false,

@@ -86,10 +86,9 @@ test("the menu leads with who you are, then account, models and settings", async
   ]);
   await expect
     .element(page.getByRole("menuitem", { name: /^Account/u }))
-    .toHaveTextContent(/ada@example\.com.*Pro.*42% used/u);
-  await expect
-    .element(page.getByRole("meter", { name: "Included usage used" }))
-    .toHaveAttribute("aria-valuenow", "42");
+    .toHaveTextContent(/ada@example\.com.*Pro/u);
+  expect(page.getByText("42% used").query()).toBeNull();
+  expect(page.getByRole("meter", { name: "Included usage used" }).query()).toBeNull();
   expect(page.getByText("History").query()).toBeNull();
   expect(page.getByText("Downloads").query()).toBeNull();
 

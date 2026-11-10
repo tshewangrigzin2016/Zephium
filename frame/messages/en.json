@@ -3959,5 +3959,13 @@
   "tab_selection_close": "Close selected tabs",
   "tab_selection_mute": "Mute selected tabs",
   "tab_selection_unmute": "Unmute selected tabs",
-  "tab_selection_failed": "Could not apply an action to every selected tab. Try again."
+  "tab_selection_failed": "Could not apply an action to every selected tab. Try again.",
+  "ai_byok_start_keys": "Add a provider key or connect a local model to start using Work. Your keys stay in this device’s secure storage.",
+  "voice_engine_unsupported_keys": "This device can’t recognize {language}. Add an OpenAI or Groq key to dictate in it.",
+  "voice_engine_setup_keys": "Add an OpenAI or Groq key to dictate.",
+  "voice_problem_no_engine_mac_keys": "This Mac can’t recognize your language. Add an OpenAI or Groq key in Settings → AI.",
+  "voice_problem_no_engine_keys": "Dictation needs your own OpenAI or Groq key. Set one up in Settings → AI.",
+  "account_welcome_body_plain": "Sign in to manage your account and devices. Everything else works the same without an account.",
+  "account_vault_fault_mac_plain": "Zephium can’t read your sign-in from the Keychain, so your account details can’t be reached. Sign in again to fix it.",
+  "account_vault_fault_windows_plain": "Zephium can’t read your sign-in from Windows Credential Manager, so your account details can’t be reached. Sign in again to fix it."
 }

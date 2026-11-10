@@ -7,10 +7,7 @@ import {
   commands,
   type AccountAvatarCropV1,
   type AccountFaultV1,
-  type AccountHistoryV1,
-  type AccountPurchaseV1,
   type AccountReplyV1,
-  type AccountRequestV1,
   type AccountSessionV1,
   type AccountV1,
 } from "$shared/ipc/bindings";
@@ -30,7 +27,6 @@ type AccountAction =
   | "verify"
   | "sign_out"
   | "sign_out_all"
-  | "buy"
   | "manage"
   | "revoke"
   | "server"
@@ -40,10 +36,6 @@ type AccountAction =
   | "reauth"
   | "email_code"
   | "email_change"
-  | "limit"
-  | "plan_preview"
-  | "plan_confirm"
-  | "plan_dismiss"
   | "export"
   | "avatar"
   | "avatar_remove";
@@ -195,16 +187,7 @@ export async function refresh() {
   if (started !== generation || busy) return;
   if (response.state === "received" && response.value?.account) adopt(response.value);
 }
-export const buy = (purchase: AccountPurchaseV1) => act("buy", () => commands.accountBuy(purchase));
 export const manage = () => act("manage", () => commands.accountManage());
-/** The daily limit in units, or null to remove it. */
-export const setDailyLimit = (limit: string | null) =>
-  act("limit", () => commands.accountSetDailyLimit(limit));
-/** Asks for a quote to move to another paid plan; nothing is charged. */
-export const previewPlanChange = (plan: string, interval: string) =>
-  act("plan_preview", () => commands.accountPlanPreview(plan, interval));
-export const confirmPlanChange = () => act("plan_confirm", () => commands.accountPlanConfirm());
-export const dismissPlanChange = () => act("plan_dismiss", () => commands.accountPlanDismiss());
 export const setServer = (server: string | null) =>
   act("server", () => commands.accountSetServer(server));
 export async function sendDeletionCode() {
@@ -257,24 +240,6 @@ export async function exportData(): Promise<"saved" | "cancelled" | AccountFault
   if (response.state !== "received") return "offline";
   if (response.value.fault) return response.value.fault;
   return response.value.saved ? "saved" : "cancelled";
-}
-
-export async function usageHistory(cursor: string | null): Promise<AccountHistoryV1> {
-  const response = await observe(
-    Promise.resolve().then(() => commands.accountUsageHistory(cursor)),
-    TIMEOUT,
-  );
-  if (response.state === "received") return response.value;
-  return { requests: [], next_cursor: null, fault: "offline" };
-}
-
-export async function receipt(id: string): Promise<AccountRequestV1 | AccountFaultV1> {
-  const response = await observe(
-    Promise.resolve().then(() => commands.accountReceipt(id)),
-    TIMEOUT,
-  );
-  if (response.state !== "received") return "offline";
-  return response.value.request ?? response.value.fault ?? "server";
 }
 
 export type AvatarPick =

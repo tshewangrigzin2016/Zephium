@@ -2,9 +2,8 @@ import "$styles/global.css";
 import { expect, test, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
-import type { AccountReplyV1, AccountRequestV1, AccountV1 } from "$shared/ipc/bindings";
+import type { AccountReplyV1, AccountV1 } from "$shared/ipc/bindings";
 import { accountFixture as account, usageFixture } from "$shared/testing/account";
-import { preferences } from "$domain/preferences";
 import AccountPage from "../components/sections/AccountPage.svelte";
 
 const native = vi.hoisted(() => ({
@@ -106,154 +105,20 @@ test("signing in takes an address, then the emailed code, with no password", asy
   await userEvent.keyboard("123456");
   expect(native.verify).toHaveBeenLastCalledWith("123456");
   await expect.element(screen.getByRole("heading", { name: "ada@example.com" })).toBeVisible();
-  await expect.element(screen.getByText("116 of 200 credits left")).toBeVisible();
-  await expect.element(screen.getByText(/^Credits refill Oct 1[34]$/u)).toBeVisible();
 });
 
-test("upgrading opens checkout and says the plan will update on its own", async () => {
+test("hosted usage, history and purchases stay absent even when the account advertises them", async () => {
   await page.viewport(1100, 1200);
-  native.get.mockResolvedValue(reply(signedIn));
-  native.buy.mockResolvedValue(reply({ ...signedIn, checkout_open: true }));
+  native.get.mockResolvedValue(reply({ ...signedIn, hosted_models: true }));
   const screen = await render(AccountPage);
-
-  await screen.getByRole("button", { name: "Upgrade", exact: true }).click();
-  await expect.element(screen.getByText("$20")).toBeVisible();
-  await screen.getByRole("button", { name: "Upgrade to Pro" }).click();
-  expect(native.buy).toHaveBeenCalledWith({ kind: "plan", plan: "pro", interval: "monthly" });
-  await expect
-    .element(screen.getByText("Finish checkout in the new tab. Your plan updates here on its own."))
-    .toBeVisible();
-});
-
-test("a server that sells nothing shows usage but no purchase", async () => {
-  await page.viewport(1100, 1200);
-  native.get.mockResolvedValue(reply({ ...signedIn, billing: false, offers: [] }));
-  const screen = await render(AccountPage);
-  await expect.element(screen.getByText("Included credits")).toBeVisible();
-  expect(screen.getByRole("button", { name: "Upgrade" }).elements()).toHaveLength(0);
-  expect(screen.getByRole("button", { name: "Manage subscription" }).elements()).toHaveLength(0);
-});
-
-test("welcome credit, holds and the daily limit read apart, holds never as charged", async () => {
-  await page.viewport(1100, 1400);
-  native.get.mockResolvedValue(
-    reply({
-      ...signedIn,
-      usage: usageFixture({
-        bonus_remaining: "1500000",
-        bonus_expires_at: "2026-10-20T00:00:00Z",
-        purchased_remaining: "5000000",
-        held: "120000",
-        spent_today: "300000",
-        daily_limit: "1000000",
-      }),
-      unsettled: [
-        {
-          id: "0b3c6a3e-8f7d-4a59-9a3c-1d2e3f4a5b6c",
-          model_id: "fast",
-          state: "usage_unknown",
-          charged: "0",
-          reserved: "120000",
-          started_at: "2026-10-09T10:00:00Z",
-          finished_at: null,
-          error_class: "client_disconnected",
-          funding: null,
-          source: null,
-        },
-      ],
-    }),
-  );
-  const screen = await render(AccountPage);
-  await expect.element(screen.getByText(/^150 left · expires Oct (19|20)$/u)).toBeVisible();
-  await expect.element(screen.getByText("500 credits left")).toBeVisible();
-  await expect.element(screen.getByText("12 · not charged yet")).toBeVisible();
-  await expect.element(screen.getByText("30 of 100 credits used today")).toBeVisible();
-  await expect
-    .element(screen.getByText("A request ended before its charge was confirmed.", { exact: false }))
-    .toBeVisible();
-});
-
-test("usage history loads on request, groups calls by task, pages by its cursor and opens a receipt", async () => {
-  await page.viewport(1100, 1400);
-  native.get.mockResolvedValue(reply(signedIn));
-  const row = (
-    id: string,
-    state: string,
-    charged: string,
-    source: AccountRequestV1["source"],
-  ): AccountRequestV1 => ({
-    id,
-    model_id: "fast",
-    state,
-    charged,
-    reserved: "1200000",
-    started_at: "2026-10-09T10:00:00Z",
-    finished_at: "2026-10-09T10:00:05Z",
-    error_class: null,
-    funding: charged === "0" ? null : "mixed",
-    source,
-  });
-  const task = { kind: "task" as const, profile: "p1", work: "w1" };
-  native.history
-    .mockResolvedValueOnce({
-      requests: [row("a", "settled", "812000", task), row("b", "running", "0", task)],
-      next_cursor: "opaque/+cursor",
-      fault: null,
-    })
-    .mockResolvedValueOnce({
-      requests: [
-        row("c", "settled", "400000", task),
-        row("d", "settled", "30000", { kind: "voice" }),
-        row("e", "released", "0", null),
-      ],
-      next_cursor: null,
-      fault: null,
-    });
-  native.receipt.mockResolvedValue({
-    request: row("a", "settled", "812000", task),
-    fault: null,
-  });
-  native.workCall.mockResolvedValue({
-    version: 1,
-    profile: "p1",
-    reply: {
-      kind: "projection",
-      projection: {
-        work: { objective: "Compare standing desks" },
-        executions: [{ title: "Standing desks, compared" }],
-      },
-    },
-  });
-  const screen = await render(AccountPage);
-
+  await expect.element(screen.getByRole("heading", { name: "ada@example.com" })).toBeVisible();
+  for (const name of ["Upgrade", "Buy credits", "Usage history"])
+    expect(screen.getByRole("button", { name, exact: true }).elements()).toHaveLength(0);
+  expect(screen.getByText("Zephium AI", { exact: true }).elements()).toHaveLength(0);
+  expect(screen.getByRole("meter").elements()).toHaveLength(0);
   expect(native.history).not.toHaveBeenCalled();
-  await screen.getByRole("button", { name: "Usage history" }).click();
-  // One row per task: its name comes from this computer's own store, and a
-  // call still running is not added to its total.
-  await expect.element(screen.getByText("Standing desks, compared")).toBeVisible();
-  expect(native.history).toHaveBeenLastCalledWith(null);
-  await expect.element(screen.getByText("81 credits · In progress")).toBeVisible();
-  expect(native.workCall).toHaveBeenCalledTimes(1);
-
-  await screen.getByRole("button", { name: "Show more" }).click();
-  expect(native.history).toHaveBeenLastCalledWith("opaque/+cursor");
-  // The next page joins the same task, and voice and the rest have their own rows.
-  await expect.element(screen.getByText("121 credits · In progress")).toBeVisible();
-  await expect.element(screen.getByText("Voice")).toBeVisible();
-  await expect.element(screen.getByText("Other", { exact: true })).toBeVisible();
-  expect(screen.getByRole("button", { name: "Show more" }).elements()).toHaveLength(0);
-  expect(native.workCall).toHaveBeenCalledTimes(1);
-
-  await screen.getByRole("button", { name: /Standing desks, compared/u }).click();
-  await expect.element(screen.getByText("81.2 credits")).toBeVisible();
-  await expect.element(screen.getByText("In progress", { exact: true })).toBeVisible();
-  await screen.getByRole("button", { name: "Details for this request" }).first().click();
-  expect(native.receipt).toHaveBeenCalledWith("a");
-  await expect
-    .element(screen.getByText(/^Charged 81\.2 credits · Plan \+ purchased · Finished /u))
-    .toBeVisible();
+  expect(native.buy).not.toHaveBeenCalled();
 });
-
 test("changing email asks for a fresh sign-in first, then signs in at the new address", async () => {
   await page.viewport(1100, 1200);
   native.get.mockResolvedValue(reply(signedIn));
@@ -311,14 +176,16 @@ test("signing out returns to the sign-in screen", async () => {
   await expect.element(screen.getByLabelText("Email address")).toBeVisible();
 });
 
-test("a sign-in the Keychain will not give up is said plainly, with a way to sign in again", async () => {
+test("an unreadable sign-in is said plainly, with a way to sign in again", async () => {
   await page.viewport(1100, 1200);
   native.get.mockResolvedValue(reply({ ...signedIn, vault_fault: true }));
   native.signOut.mockClear();
   native.signOut.mockResolvedValue(reply(account()));
   const screen = await render(AccountPage);
   await expect
-    .element(screen.getByText("can’t read your sign-in from the Keychain", { exact: false }))
+    .element(
+      screen.getByText(/can’t read your sign-in from (the Keychain|Windows Credential Manager)/u),
+    )
     .toBeVisible();
   expect(native.signOut).not.toHaveBeenCalled();
   await screen.getByRole("button", { name: "Sign in again" }).click();
@@ -334,20 +201,4 @@ test("a readable sign-in shows no Keychain warning", async () => {
     .element(screen.getByRole("button", { name: "Sign out", exact: true }).first())
     .toBeVisible();
   expect(screen.getByText("can’t read your sign-in", { exact: false }).elements()).toHaveLength(0);
-});
-
-test("with Work and AI off the plan stays and Zephium AI's usage and credits go", async () => {
-  await page.viewport(1100, 1200);
-  native.settings = { "ai.enabled": "false" };
-  await preferences.init();
-  native.get.mockResolvedValue(reply(signedIn));
-  const screen = await render(AccountPage);
-  await expect.element(screen.getByText("Plan", { exact: true })).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: "Upgrade" })).toBeVisible();
-  expect(screen.getByText("Included credits").elements()).toHaveLength(0);
-  expect(screen.getByText("Purchased credits").elements()).toHaveLength(0);
-  expect(screen.getByText("Zephium AI").elements()).toHaveLength(0);
-  screen.unmount();
-  preferences.dispose();
-  native.settings = {};
 });
